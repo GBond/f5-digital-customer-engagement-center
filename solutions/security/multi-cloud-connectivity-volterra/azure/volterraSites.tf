@@ -19,9 +19,12 @@ data "azurerm_subnet" "transitBu11_inside" {
 ############################ Volterra Azure VNet Sites ############################
 
 resource "volterra_azure_vnet_site" "bu11" {
-  name         = "${var.volterraUniquePrefix}-bu11"
-  namespace    = "system"
-  azure_region = azurerm_resource_group.rg["transitBu11"].location
+  name                    = "${var.volterraUniquePrefix}-bu11"
+  namespace               = "system"
+  azure_region            = azurerm_resource_group.rg["transitBu11"].location
+  resource_group          = azurerm_resource_group.rg["transitBu11"].name
+  logs_streaming_disabled = true
+  machine_type            = "Standard_D3_v2"
 
   azure_cred {
     name      = var.volterraCloudCred
@@ -29,11 +32,13 @@ resource "volterra_azure_vnet_site" "bu11" {
     tenant    = var.volterraTenant
   }
 
-  logs_streaming_disabled = true
-  resource_group          = azurerm_resource_group.rg["transitBu11"].name
-
   ingress_egress_gw {
-    azure_certified_hw = "azure-byol-multi-nic-voltmesh"
+    azure_certified_hw       = "azure-byol-multi-nic-voltmesh"
+    no_forward_proxy         = true
+    no_global_network        = true
+    no_inside_static_routes  = true
+    no_network_policy        = true
+    no_outside_static_routes = true
 
     az_nodes {
       azure_az  = "1"
