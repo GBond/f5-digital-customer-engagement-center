@@ -25,6 +25,7 @@ resource "volterra_azure_vnet_site" "bu11" {
   resource_group          = azurerm_resource_group.rg["transitBu11"].name
   logs_streaming_disabled = true
   machine_type            = "Standard_D3_v2"
+  assisted                = var.assisted
 
   azure_cred {
     name      = var.volterraCloudCred
