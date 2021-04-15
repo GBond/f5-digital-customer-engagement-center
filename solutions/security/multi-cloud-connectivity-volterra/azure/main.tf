@@ -49,15 +49,15 @@ locals {
 
 locals {
   jumphosts = {
-    # transitBu11 = {
-    #   subnet = module.network["transitBu11"].vnet_subnets[0]
-    # }
-    # transitBu12 = {
-    #   subnet = module.network["transitBu12"].vnet_subnets[0]
-    # }
-    # transitBu13 = {
-    #   subnet = module.network["transitBu13"].vnet_subnets[0]
-    # }
+    transitBu11 = {
+      subnet = module.network["transitBu11"].vnet_subnets[0]
+    }
+    transitBu12 = {
+      subnet = module.network["transitBu12"].vnet_subnets[0]
+    }
+    transitBu13 = {
+      subnet = module.network["transitBu13"].vnet_subnets[0]
+    }
     bu11 = {
       subnet = module.network["bu11"].vnet_subnets[0]
     }
@@ -112,33 +112,101 @@ module "network" {
   }
 }
 
+############################ VNet Peering ############################
+
+# Transit to Transit Peering
+resource "azurerm_virtual_network_peering" "peer11to12" {
+  name                      = "peer11to12"
+  resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
+  virtual_network_name      = module.network["transitBu11"].vnet_name
+  remote_virtual_network_id = module.network["transitBu12"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+resource "azurerm_virtual_network_peering" "peer11to13" {
+  name                      = "peer11to13"
+  resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
+  virtual_network_name      = module.network["transitBu11"].vnet_name
+  remote_virtual_network_id = module.network["transitBu13"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+resource "azurerm_virtual_network_peering" "peer12to11" {
+  name                      = "peer12to11"
+  resource_group_name       = azurerm_resource_group.rg["transitBu12"].name
+  virtual_network_name      = module.network["transitBu12"].vnet_name
+  remote_virtual_network_id = module.network["transitBu11"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+resource "azurerm_virtual_network_peering" "peer12to13" {
+  name                      = "peer12to13"
+  resource_group_name       = azurerm_resource_group.rg["transitBu12"].name
+  virtual_network_name      = module.network["transitBu12"].vnet_name
+  remote_virtual_network_id = module.network["transitBu13"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+resource "azurerm_virtual_network_peering" "peer13to11" {
+  name                      = "peer13to11"
+  resource_group_name       = azurerm_resource_group.rg["transitBu13"].name
+  virtual_network_name      = module.network["transitBu13"].vnet_name
+  remote_virtual_network_id = module.network["transitBu11"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+resource "azurerm_virtual_network_peering" "peer13to12" {
+  name                      = "peer13to12"
+  resource_group_name       = azurerm_resource_group.rg["transitBu13"].name
+  virtual_network_name      = module.network["transitBu13"].vnet_name
+  remote_virtual_network_id = module.network["transitBu12"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+# BU to Transit BU Peering
+resource "azurerm_virtual_network_peering" "peer11_1" {
+  name                      = "peer11toTransit11"
+  resource_group_name       = azurerm_resource_group.rg["bu11"].name
+  virtual_network_name      = module.network["bu11"].vnet_name
+  remote_virtual_network_id = module.network["transitBu11"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+resource "azurerm_virtual_network_peering" "peer11_2" {
+  name                      = "peerTransit11to11"
+  resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
+  virtual_network_name      = module.network["transitBu11"].vnet_name
+  remote_virtual_network_id = module.network["bu11"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
 ############################ Route Tables ############################
 
-resource "azurerm_route_table" "rt" {
-  for_each                      = local.businessUnits
-  name                          = format("%s-rt-public-%s", var.projectPrefix, random_id.buildSuffix.hex)
-  location                      = azurerm_resource_group.rg[each.key].location
-  resource_group_name           = azurerm_resource_group.rg[each.key].name
-  disable_bgp_route_propagation = false
+# resource "azurerm_route_table" "rt" {
+#   for_each                      = local.businessUnits
+#   name                          = format("%s-rt-public-%s", var.projectPrefix, random_id.buildSuffix.hex)
+#   location                      = azurerm_resource_group.rg[each.key].location
+#   resource_group_name           = azurerm_resource_group.rg[each.key].name
+#   disable_bgp_route_propagation = false
 
-  route {
-    name                   = "volterra_gateway"
-    address_prefix         = "100.64.0.0/16"
-    next_hop_type          = "VirtualAppliance"
-    next_hop_in_ip_address = "10.64.1.10"
-  }
+#   route {
+#     name                   = "volterra_gateway"
+#     address_prefix         = "100.64.0.0/16"
+#     next_hop_type          = "VirtualAppliance"
+#     next_hop_in_ip_address = "10.64.1.10"
+#   }
 
-  tags = {
-    Name      = format("%s-rt-public-%s", var.resourceOwner, random_id.buildSuffix.hex)
-    Terraform = "true"
-  }
-}
+#   tags = {
+#     Name      = format("%s-rt-public-%s", var.resourceOwner, random_id.buildSuffix.hex)
+#     Terraform = "true"
+#   }
+# }
 
-resource "azurerm_subnet_route_table_association" "rt" {
-  for_each       = local.businessUnits
-  subnet_id      = module.network[each.key].vnet_subnets[0]
-  route_table_id = azurerm_route_table.rt[each.key].id
-}
+# resource "azurerm_subnet_route_table_association" "rt" {
+#   for_each       = local.businessUnits
+#   subnet_id      = module.network[each.key].vnet_subnets[0]
+#   route_table_id = azurerm_route_table.rt[each.key].id
+# }
 
 ############################ Security Groups ############################
 
