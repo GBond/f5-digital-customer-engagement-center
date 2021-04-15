@@ -19,13 +19,13 @@ data "azurerm_subnet" "transitBu11_inside" {
 ############################ Volterra Azure VNet Sites ############################
 
 resource "volterra_azure_vnet_site" "bu11" {
-  name                    = "${var.volterraUniquePrefix}-bu11"
+  name                    = format("%s-bu11-azure-%s", var.volterraUniquePrefix, random_id.buildSuffix.hex)
   namespace               = "system"
   azure_region            = azurerm_resource_group.rg["transitBu11"].location
-  resource_group          = azurerm_resource_group.rg["transitBu11"].name
-  logs_streaming_disabled = true
+  resource_group          = format("%s-bu11-volterra-%s", var.volterraUniquePrefix, random_id.buildSuffix.hex)
   machine_type            = "Standard_D3_v2"
   assisted                = var.assisted
+  logs_streaming_disabled = true
 
   azure_cred {
     name      = var.volterraCloudCred
@@ -43,16 +43,18 @@ resource "volterra_azure_vnet_site" "bu11" {
 
     az_nodes {
       azure_az  = "1"
-      disk_size = "80"
+      disk_size = 80
 
       inside_subnet {
         subnet {
-          subnet_name = data.azurerm_subnet.transitBu11_inside.name
+          subnet_name         = data.azurerm_subnet.transitBu11_inside.name
+          vnet_resource_group = true
         }
       }
       outside_subnet {
         subnet {
-          subnet_name = data.azurerm_subnet.transitBu11_outside.name
+          subnet_name         = data.azurerm_subnet.transitBu11_outside.name
+          vnet_resource_group = true
         }
       }
     }
@@ -66,13 +68,11 @@ resource "volterra_azure_vnet_site" "bu11" {
   }
 }
 
-
-# resource "volterra_tf_params_action" "applyBu11" {
-#   count            = var.assisted ? 0 : 1
-#   site_name        = volterra_azure_vnet_site.bu11.name
-#   site_kind        = "azure_vnet_site"
-#   action           = "plan"
-#   wait_for_action  = true
-#   ignore_on_update = false
-# }
-
+resource "volterra_tf_params_action" "applyBu11" {
+  count            = var.assisted ? 0 : 1
+  site_name        = volterra_azure_vnet_site.bu11.name
+  site_kind        = "azure_vnet_site"
+  action           = "apply"
+  wait_for_action  = true
+  ignore_on_update = true
+}
