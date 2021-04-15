@@ -43,7 +43,7 @@ resource "volterra_azure_vnet_site" "bu11" {
 
     az_nodes {
       azure_az  = "1"
-      disk_size = "disk_size"
+      disk_size = "80"
 
       inside_subnet {
         subnet {
