@@ -69,10 +69,10 @@ module "network" {
   subnet_prefixes     = each.value["subnetPrefixes"]
   subnet_names        = each.value["subnetNames"]
 
-  nsg_ids = {
-    external = azurerm_network_security_group.allow_ce[each.key].id
-    internal = azurerm_network_security_group.allow_ce[each.key].id
-  }
+  # nsg_ids = {
+  #   external = azurerm_network_security_group.allow_ce[each.key].id
+  #   internal = azurerm_network_security_group.allow_ce[each.key].id
+  # }
 
   route_tables_ids = {
     external = azurerm_route_table.rt[each.key].id
