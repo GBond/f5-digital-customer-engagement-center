@@ -3,8 +3,8 @@ resource "volterra_origin_pool" "bu11app" {
   namespace              = var.namespace
   endpoint_selection     = "DISTRIBUTED"
   loadbalancer_algorithm = "LB_OVERRIDE"
-  port = 80
-  no_tls = true
+  port                   = 80
+  no_tls                 = true
 
   origin_servers {
     private_ip {
@@ -26,14 +26,14 @@ resource "volterra_origin_pool" "bu11app" {
 }
 
 resource "volterra_http_loadbalancer" "bu11app" {
-  name      = "bu11app"
-  namespace = var.namespace
-  no_challenge = true
-  domains = ["bu11app.shared.acme.com"]
-  random = true
-  disable_rate_limit = true
+  name                            = "bu11app"
+  namespace                       = var.namespace
+  no_challenge                    = true
+  domains                         = ["bu11app.shared.acme.com"]
+  random                          = true
+  disable_rate_limit              = true
   service_policies_from_namespace = true
-  disable_waf = true
+  disable_waf                     = true
 
   advertise_custom {
     advertise_where {
