@@ -8,37 +8,37 @@ locals {
   businessUnits = {
     transitBu11 = {
       location       = var.azureLocation
-      addressSpace   = "100.64.48.0/20"
+      addressSpace   = ["100.64.48.0/20"]
       subnetPrefixes = ["100.64.48.0/24", "100.64.49.0/24", "100.64.50.0/24"]
       subnetNames    = ["external", "internal", "workload"]
     }
     transitBu12 = {
       location       = var.azureLocation
-      addressSpace   = "100.64.64.0/20"
+      addressSpace   = ["100.64.64.0/20"]
       subnetPrefixes = ["100.64.64.0/24", "100.64.65.0/24", "100.64.66.0/24"]
       subnetNames    = ["external", "internal", "workload"]
     }
     transitBu13 = {
       location       = var.azureLocation
-      addressSpace   = "100.64.80.0/20"
+      addressSpace   = ["100.64.80.0/20"]
       subnetPrefixes = ["100.64.80.0/24", "100.64.81.0/24", "100.64.82.0/24"]
       subnetNames    = ["external", "internal", "workload"]
     }
     bu11 = {
       location       = var.azureLocation
-      addressSpace   = "10.1.0.0/16"
+      addressSpace   = ["10.1.0.0/16"]
       subnetPrefixes = ["10.1.10.0/24", "10.1.52.0/24"]
       subnetNames    = ["external", "internal"]
     }
     bu12 = {
       location       = var.azureLocation
-      addressSpace   = "10.1.0.0/16"
+      addressSpace   = ["10.1.0.0/16"]
       subnetPrefixes = ["10.1.10.0/24", "10.1.52.0/24"]
       subnetNames    = ["external", "internal"]
     }
     bu13 = {
       location       = var.azureLocation
-      addressSpace   = "10.1.0.0/16"
+      addressSpace   = ["10.1.0.0/16"]
       subnetPrefixes = ["10.1.10.0/24", "10.1.52.0/24"]
       subnetNames    = ["external", "internal"]
     }
@@ -95,16 +95,36 @@ resource "azurerm_resource_group" "rg" {
   }
 }
 
+############################ Route Tables ############################
+
+resource "azurerm_route_table" "rt" {
+  for_each                      = local.businessUnits
+  name                          = format("%s-rt-%s-%s", var.projectPrefix, each.key, random_id.buildSuffix.hex)
+  location                      = azurerm_resource_group.rg[each.key].location
+  resource_group_name           = azurerm_resource_group.rg[each.key].name
+  disable_bgp_route_propagation = false
+
+  tags = {
+    Name      = format("%s-rt-%s-%s", var.resourceOwner, each.key, random_id.buildSuffix.hex)
+    Terraform = "true"
+  }
+}
+
 ############################ VNets ############################
 
 module "network" {
   for_each            = local.businessUnits
-  source              = "Azure/network/azurerm"
+  source              = "Azure/vnet/azurerm"
   resource_group_name = azurerm_resource_group.rg[each.key].name
   vnet_name           = format("%s-vnet-%s-%s", var.projectPrefix, each.key, random_id.buildSuffix.hex)
   address_space       = each.value["addressSpace"]
   subnet_prefixes     = each.value["subnetPrefixes"]
   subnet_names        = each.value["subnetNames"]
+
+  route_tables_ids = {
+    external = azurerm_route_table.rt[each.key].id
+    internal = azurerm_route_table.rt[each.key].id
+  }
 
   tags = {
     Name      = format("%s-vnet-%s-%s", var.resourceOwner, each.key, random_id.buildSuffix.hex)
@@ -197,33 +217,78 @@ resource "azurerm_virtual_network_peering" "peer12_2" {
   allow_forwarded_traffic   = true
 }
 
-############################ Route Tables ############################
+# BU to Transit BU13 Peering
+resource "azurerm_virtual_network_peering" "peer13_1" {
+  name                      = "peer13toTransit13"
+  resource_group_name       = azurerm_resource_group.rg["bu13"].name
+  virtual_network_name      = module.network["bu13"].vnet_name
+  remote_virtual_network_id = module.network["transitBu13"].vnet_id
+  allow_forwarded_traffic   = true
+}
 
-# resource "azurerm_route_table" "rt" {
-#   for_each                      = local.businessUnits
-#   name                          = format("%s-rt-public-%s", var.projectPrefix, random_id.buildSuffix.hex)
-#   location                      = azurerm_resource_group.rg[each.key].location
-#   resource_group_name           = azurerm_resource_group.rg[each.key].name
-#   disable_bgp_route_propagation = false
+resource "azurerm_virtual_network_peering" "peer13_2" {
+  name                      = "peerTransit13to13"
+  resource_group_name       = azurerm_resource_group.rg["transitBu13"].name
+  virtual_network_name      = module.network["transitBu13"].vnet_name
+  remote_virtual_network_id = module.network["bu13"].vnet_id
+  allow_forwarded_traffic   = true
+}
 
-#   route {
-#     name                   = "volterra_gateway"
-#     address_prefix         = "100.64.0.0/16"
-#     next_hop_type          = "VirtualAppliance"
-#     next_hop_in_ip_address = "10.64.1.10"
-#   }
+############################ Routes ############################
 
-#   tags = {
-#     Name      = format("%s-rt-public-%s", var.resourceOwner, random_id.buildSuffix.hex)
-#     Terraform = "true"
-#   }
-# }
+# Set locals
+locals {
+  routes = {
+    bu11 = {
+      nextHop = data.azurerm_network_interface.sliBu11.private_ip_address
+    }
+    bu12 = {
+      nextHop = data.azurerm_network_interface.sliBu12.private_ip_address
+    }
+    bu13 = {
+      nextHop = data.azurerm_network_interface.sliBu13.private_ip_address
+    }
+    transitBu11 = {
+      nextHop = data.azurerm_network_interface.sliBu11.private_ip_address
+    }
+    transitBu12 = {
+      nextHop = data.azurerm_network_interface.sliBu12.private_ip_address
+    }
+    transitBu13 = {
+      nextHop = data.azurerm_network_interface.sliBu13.private_ip_address
+    }
+  }
+}
 
-# resource "azurerm_subnet_route_table_association" "rt" {
-#   for_each       = local.businessUnits
-#   subnet_id      = module.network[each.key].vnet_subnets[0]
-#   route_table_id = azurerm_route_table.rt[each.key].id
-# }
+# Collect NIC data
+data "azurerm_network_interface" "sliBu11" {
+  name                = "master-0-sli"
+  resource_group_name = azurerm_resource_group.rg["transitBu11"].name
+  depends_on          = [volterra_tf_params_action.applyBu11]
+}
+
+data "azurerm_network_interface" "sliBu12" {
+  name                = "master-0-sli"
+  resource_group_name = azurerm_resource_group.rg["transitBu12"].name
+  depends_on          = [volterra_tf_params_action.applyBu12]
+}
+
+data "azurerm_network_interface" "sliBu13" {
+  name                = "master-0-sli"
+  resource_group_name = azurerm_resource_group.rg["transitBu13"].name
+  depends_on          = [volterra_tf_params_action.applyBu13]
+}
+
+# Create route
+resource "azurerm_route" "rt" {
+  for_each               = local.routes
+  name                   = "volterra_gateway"
+  resource_group_name    = azurerm_resource_group.rg[each.key].name
+  route_table_name       = azurerm_route_table.rt[each.key].name
+  address_prefix         = "0.0.0.0/0"
+  next_hop_type          = "VirtualAppliance"
+  next_hop_in_ip_address = each.value["nextHop"]
+}
 
 ############################ Security Groups ############################
 
