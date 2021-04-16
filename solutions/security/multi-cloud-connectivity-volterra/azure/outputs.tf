@@ -22,6 +22,18 @@ output "transitBu13JumphostPublicIp" {
   description = "Transit BU13 Jumphost Public IP"
   value       = module.jumphost["transitBu13"].publicIp
 }
+output "transitBu11JumphostPrivateIp" {
+  description = "Transit BU11 Jumphost Private IP"
+  value       = module.jumphost["transitBu11"].jumphostInfo.private_ip_address
+}
+output "transitBu12JumphostPrivateIp" {
+  description = "Transit BU12 Jumphost Private IP"
+  value       = module.jumphost["transitBu12"].jumphostInfo.private_ip_address
+}
+output "transitBu13JumphostPrivateIp" {
+  description = "Transit BU13 Jumphost Private IP"
+  value       = module.jumphost["transitBu13"].jumphostInfo.private_ip_address
+}
 output "bu11WebServerIP" {
   description = "BU11 Web Server Private IP"
   value       = module.webserver["bu11"].privateIp
