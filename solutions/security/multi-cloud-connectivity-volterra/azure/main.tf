@@ -163,7 +163,7 @@ resource "azurerm_virtual_network_peering" "peer13to12" {
   allow_forwarded_traffic   = true
 }
 
-# BU to Transit BU Peering
+# BU to Transit BU11 Peering
 resource "azurerm_virtual_network_peering" "peer11_1" {
   name                      = "peer11toTransit11"
   resource_group_name       = azurerm_resource_group.rg["bu11"].name
@@ -177,6 +177,23 @@ resource "azurerm_virtual_network_peering" "peer11_2" {
   resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
   virtual_network_name      = module.network["transitBu11"].vnet_name
   remote_virtual_network_id = module.network["bu11"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+# BU to Transit BU12 Peering
+resource "azurerm_virtual_network_peering" "peer12_1" {
+  name                      = "peer12toTransit12"
+  resource_group_name       = azurerm_resource_group.rg["bu12"].name
+  virtual_network_name      = module.network["bu12"].vnet_name
+  remote_virtual_network_id = module.network["transitBu12"].vnet_id
+  allow_forwarded_traffic   = true
+}
+
+resource "azurerm_virtual_network_peering" "peer12_2" {
+  name                      = "peerTransit12to12"
+  resource_group_name       = azurerm_resource_group.rg["transitBu12"].name
+  virtual_network_name      = module.network["transitBu12"].vnet_name
+  remote_virtual_network_id = module.network["bu12"].vnet_id
   allow_forwarded_traffic   = true
 }
 
