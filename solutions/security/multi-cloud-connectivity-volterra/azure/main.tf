@@ -45,43 +45,6 @@ locals {
   }
 }
 
-############################ Locals for Compute ############################
-
-locals {
-  jumphosts = {
-    transitBu11 = {
-      subnet = module.network["transitBu11"].vnet_subnets[0]
-    }
-    transitBu12 = {
-      subnet = module.network["transitBu12"].vnet_subnets[0]
-    }
-    transitBu13 = {
-      subnet = module.network["transitBu13"].vnet_subnets[0]
-    }
-    bu11 = {
-      subnet = module.network["bu11"].vnet_subnets[0]
-    }
-    bu12 = {
-      subnet = module.network["bu12"].vnet_subnets[0]
-    }
-    bu13 = {
-      subnet = module.network["bu13"].vnet_subnets[0]
-    }
-  }
-
-  webservers = {
-    bu11 = {
-      subnet = module.network["bu11"].vnet_subnets[1]
-    }
-    bu12 = {
-      subnet = module.network["bu12"].vnet_subnets[1]
-    }
-    bu13 = {
-      subnet = module.network["bu13"].vnet_subnets[1]
-    }
-  }
-}
-
 ############################ Resource Groups ############################
 
 resource "azurerm_resource_group" "rg" {
@@ -91,21 +54,6 @@ resource "azurerm_resource_group" "rg" {
 
   tags = {
     Name      = format("%s-rg-%s-%s", var.resourceOwner, each.key, random_id.buildSuffix.hex)
-    Terraform = "true"
-  }
-}
-
-############################ Route Tables ############################
-
-resource "azurerm_route_table" "rt" {
-  for_each                      = local.businessUnits
-  name                          = format("%s-rt-%s-%s", var.projectPrefix, each.key, random_id.buildSuffix.hex)
-  location                      = azurerm_resource_group.rg[each.key].location
-  resource_group_name           = azurerm_resource_group.rg[each.key].name
-  disable_bgp_route_propagation = false
-
-  tags = {
-    Name      = format("%s-rt-%s-%s", var.resourceOwner, each.key, random_id.buildSuffix.hex)
     Terraform = "true"
   }
 }
@@ -121,6 +69,11 @@ module "network" {
   subnet_prefixes     = each.value["subnetPrefixes"]
   subnet_names        = each.value["subnetNames"]
 
+  nsg_ids = {
+    external = azurerm_network_security_group.allow_ce[each.key].id
+    internal = azurerm_network_security_group.allow_ce[each.key].id
+  }
+
   route_tables_ids = {
     external = azurerm_route_table.rt[each.key].id
     internal = azurerm_route_table.rt[each.key].id
@@ -132,9 +85,8 @@ module "network" {
   }
 }
 
-############################ VNet Peering ############################
+############################ VNet Peering - Transit Mesh ############################
 
-# Transit to Transit Peering
 resource "azurerm_virtual_network_peering" "peer11to12" {
   name                      = "peer11to12"
   resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
@@ -182,6 +134,8 @@ resource "azurerm_virtual_network_peering" "peer13to12" {
   remote_virtual_network_id = module.network["transitBu12"].vnet_id
   allow_forwarded_traffic   = true
 }
+
+############################ VNet Peering - BU to Transit ############################
 
 # BU to Transit BU11 Peering
 resource "azurerm_virtual_network_peering" "peer11_1" {
@@ -234,7 +188,7 @@ resource "azurerm_virtual_network_peering" "peer13_2" {
   allow_forwarded_traffic   = true
 }
 
-############################ Routes ############################
+############################ Route Tables ############################
 
 # Set locals
 locals {
@@ -260,38 +214,140 @@ locals {
   }
 }
 
-# Collect NIC data
+# Create route tables
+resource "azurerm_route_table" "rt" {
+  for_each                      = local.businessUnits
+  name                          = format("%s-rt-%s-%s", var.projectPrefix, each.key, random_id.buildSuffix.hex)
+  location                      = azurerm_resource_group.rg[each.key].location
+  resource_group_name           = azurerm_resource_group.rg[each.key].name
+  disable_bgp_route_propagation = false
+
+  tags = {
+    Name      = format("%s-rt-%s-%s", var.resourceOwner, each.key, random_id.buildSuffix.hex)
+    Terraform = "true"
+  }
+}
+
+# Collect Volterra node "inside" NIC data
 data "azurerm_network_interface" "sliBu11" {
   name                = "master-0-sli"
-  resource_group_name = azurerm_resource_group.rg["transitBu11"].name
+  resource_group_name = format("%s-bu11-volterra-%s", var.volterraUniquePrefix, random_id.buildSuffix.hex)
   depends_on          = [volterra_tf_params_action.applyBu11]
 }
 
 data "azurerm_network_interface" "sliBu12" {
   name                = "master-0-sli"
-  resource_group_name = azurerm_resource_group.rg["transitBu12"].name
+  resource_group_name = format("%s-bu12-volterra-%s", var.volterraUniquePrefix, random_id.buildSuffix.hex)
   depends_on          = [volterra_tf_params_action.applyBu12]
 }
 
 data "azurerm_network_interface" "sliBu13" {
   name                = "master-0-sli"
-  resource_group_name = azurerm_resource_group.rg["transitBu13"].name
+  resource_group_name = format("%s-bu13-volterra-%s", var.volterraUniquePrefix, random_id.buildSuffix.hex)
   depends_on          = [volterra_tf_params_action.applyBu13]
 }
 
-# Create route
+# Create routes
 resource "azurerm_route" "rt" {
   for_each               = local.routes
   name                   = "volterra_gateway"
   resource_group_name    = azurerm_resource_group.rg[each.key].name
   route_table_name       = azurerm_route_table.rt[each.key].name
-  address_prefix         = "0.0.0.0/0"
+  address_prefix         = "100.64.101.0/24"
   next_hop_type          = "VirtualAppliance"
   next_hop_in_ip_address = each.value["nextHop"]
 }
 
-############################ Security Groups ############################
+############################ Security Groups - Volterra CE Nodes ############################
 
+# Set locals
+locals {
+  nsgVolterra = {
+    bu11 = {
+      sourceAddress = local.businessUnits["transitBu11"].subnetPrefixes[1]
+    }
+    bu12 = {
+      sourceAddress = local.businessUnits["transitBu12"].subnetPrefixes[1]
+    }
+    bu13 = {
+      sourceAddress = local.businessUnits["transitBu13"].subnetPrefixes[1]
+    }
+    transitBu11 = {
+      sourceAddress = local.businessUnits["transitBu11"].subnetPrefixes[1]
+    }
+    transitBu12 = {
+      sourceAddress = local.businessUnits["transitBu12"].subnetPrefixes[1]
+    }
+    transitBu13 = {
+      sourceAddress = local.businessUnits["transitBu13"].subnetPrefixes[1]
+    }
+  }
+}
+
+# Allow Volterra CE nodes into network
+resource "azurerm_network_security_group" "allow_ce" {
+  for_each            = local.nsgVolterra
+  name                = format("%s-nsg-allow-ce-%s", var.projectPrefix, random_id.buildSuffix.hex)
+  location            = azurerm_resource_group.rg[each.key].location
+  resource_group_name = azurerm_resource_group.rg[each.key].name
+
+  security_rule {
+    name                       = "allow-ingress-ce"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = each.value["sourceAddress"]
+    destination_address_prefix = "*"
+  }
+
+  tags = {
+    Name      = format("%s-nsg-allow-ce-%s", var.resourceOwner, random_id.buildSuffix.hex)
+    Terraform = "true"
+  }
+}
+
+############################ Security Groups - Jumphost, Web Servers ############################
+
+# Set locals
+locals {
+  jumphosts = {
+    transitBu11 = {
+      subnet = module.network["transitBu11"].vnet_subnets[0]
+    }
+    transitBu12 = {
+      subnet = module.network["transitBu12"].vnet_subnets[0]
+    }
+    transitBu13 = {
+      subnet = module.network["transitBu13"].vnet_subnets[0]
+    }
+    bu11 = {
+      subnet = module.network["bu11"].vnet_subnets[0]
+    }
+    bu12 = {
+      subnet = module.network["bu12"].vnet_subnets[0]
+    }
+    bu13 = {
+      subnet = module.network["bu13"].vnet_subnets[0]
+    }
+  }
+
+  webservers = {
+    bu11 = {
+      subnet = module.network["bu11"].vnet_subnets[1]
+    }
+    bu12 = {
+      subnet = module.network["bu12"].vnet_subnets[1]
+    }
+    bu13 = {
+      subnet = module.network["bu13"].vnet_subnets[1]
+    }
+  }
+}
+
+# Allow jumphost access
 resource "azurerm_network_security_group" "jumphost" {
   for_each            = local.jumphosts
   name                = format("%s-nsg-jumphost-%s", var.projectPrefix, random_id.buildSuffix.hex)
@@ -317,6 +373,7 @@ resource "azurerm_network_security_group" "jumphost" {
   }
 }
 
+# Allow webserver access
 resource "azurerm_network_security_group" "webserver" {
   for_each            = local.webservers
   name                = format("%s-nsg-webservers-%s", var.projectPrefix, random_id.buildSuffix.hex)
