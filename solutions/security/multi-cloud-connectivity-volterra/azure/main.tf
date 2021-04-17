@@ -293,7 +293,7 @@ resource "azurerm_network_security_group" "allow_ce" {
 
   security_rule {
     name                       = "allow-ingress-ce"
-    priority                   = 100
+    priority                   = 200
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "*"
