@@ -1,16 +1,10 @@
 #!/bin/bash
-module=$1
-
-echo "deleteing all resources in module ${module}"
-
+echo "This will destroy your deployment, no going back from here - Press enter to continue"
+# apply
 read -r -p "Are you sure? [y/N] " response
 if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
 then
-    list=$(terraform state list | grep module.${module})
-    for item in $list
-    do
-	terraform destroy --target $item --auto-approve
-    done
+    terraform destroy --auto-approve
 else
     echo "canceling"
 fi
