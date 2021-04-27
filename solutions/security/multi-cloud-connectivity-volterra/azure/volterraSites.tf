@@ -61,7 +61,6 @@ resource "volterra_azure_vnet_site" "bu11" {
     azure_certified_hw       = "azure-byol-multi-nic-voltmesh"
     no_forward_proxy         = true
     no_global_network        = true
-    no_inside_static_routes  = true
     no_network_policy        = true
     no_outside_static_routes = true
 
@@ -79,6 +78,31 @@ resource "volterra_azure_vnet_site" "bu11" {
         subnet {
           subnet_name         = data.azurerm_subnet.transitBu11_outside.name
           vnet_resource_group = true
+        }
+      }
+    }
+
+    inside_static_routes {
+      static_route_list {
+        custom_static_route {
+          subnets {
+            ipv4 {
+              prefix = "10.1.0.0"
+              plen = "16"
+            }
+          }
+          nexthop {
+            type = "NEXT_HOP_USE_CONFIGURED"
+            nexthop_address {
+              ipv4 {
+                addr = "100.64.49.1"
+              }
+            }
+          }
+          attrs = [
+            "ROUTE_ATTR_INSTALL_FORWARDING",
+            "ROUTE_ATTR_INSTALL_HOST"
+          ]
         }
       }
     }
@@ -123,7 +147,6 @@ resource "volterra_azure_vnet_site" "bu12" {
     azure_certified_hw       = "azure-byol-multi-nic-voltmesh"
     no_forward_proxy         = true
     no_global_network        = true
-    no_inside_static_routes  = true
     no_network_policy        = true
     no_outside_static_routes = true
 
@@ -141,6 +164,31 @@ resource "volterra_azure_vnet_site" "bu12" {
         subnet {
           subnet_name         = data.azurerm_subnet.transitBu12_outside.name
           vnet_resource_group = true
+        }
+      }
+    }
+
+    inside_static_routes {
+      static_route_list {
+        custom_static_route {
+          subnets {
+            ipv4 {
+              prefix = "10.1.0.0"
+              plen = "16"
+            }
+          }
+          nexthop {
+            type = "NEXT_HOP_USE_CONFIGURED"
+            nexthop_address {
+              ipv4 {
+                addr = "100.64.65.1"
+              }
+            }
+          }
+          attrs = [
+            "ROUTE_ATTR_INSTALL_FORWARDING",
+            "ROUTE_ATTR_INSTALL_HOST"
+          ]
         }
       }
     }
@@ -184,7 +232,6 @@ resource "volterra_azure_vnet_site" "bu13" {
     azure_certified_hw       = "azure-byol-multi-nic-voltmesh"
     no_forward_proxy         = true
     no_global_network        = true
-    no_inside_static_routes  = true
     no_network_policy        = true
     no_outside_static_routes = true
 
@@ -202,6 +249,31 @@ resource "volterra_azure_vnet_site" "bu13" {
         subnet {
           subnet_name         = data.azurerm_subnet.transitBu13_outside.name
           vnet_resource_group = true
+        }
+      }
+    }
+
+    inside_static_routes {
+      static_route_list {
+        custom_static_route {
+          subnets {
+            ipv4 {
+              prefix = "10.1.0.0"
+              plen = "16"
+            }
+          }
+          nexthop {
+            type = "NEXT_HOP_USE_CONFIGURED"
+            nexthop_address {
+              ipv4 {
+                addr = "100.64.81.1"
+              }
+            }
+          }
+          attrs = [
+            "ROUTE_ATTR_INSTALL_FORWARDING",
+            "ROUTE_ATTR_INSTALL_HOST"
+          ]
         }
       }
     }
