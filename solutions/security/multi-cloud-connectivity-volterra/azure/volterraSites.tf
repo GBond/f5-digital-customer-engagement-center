@@ -88,7 +88,7 @@ resource "volterra_azure_vnet_site" "bu11" {
           subnets {
             ipv4 {
               prefix = "10.1.0.0"
-              plen = "16"
+              plen   = "16"
             }
           }
           nexthop {
@@ -174,7 +174,7 @@ resource "volterra_azure_vnet_site" "bu12" {
           subnets {
             ipv4 {
               prefix = "10.1.0.0"
-              plen = "16"
+              plen   = "16"
             }
           }
           nexthop {
@@ -259,7 +259,7 @@ resource "volterra_azure_vnet_site" "bu13" {
           subnets {
             ipv4 {
               prefix = "10.1.0.0"
-              plen = "16"
+              plen   = "16"
             }
           }
           nexthop {
