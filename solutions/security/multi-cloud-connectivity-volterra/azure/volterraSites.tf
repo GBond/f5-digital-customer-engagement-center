@@ -7,36 +7,48 @@ data "azurerm_subnet" "transitBu11_outside" {
   name                 = "external"
   virtual_network_name = module.network["transitBu11"].vnet_name
   resource_group_name  = azurerm_resource_group.rg["transitBu11"].name
+
+  depends_on = [module.network["transitBu11"].vnet_subnets]
 }
 
 data "azurerm_subnet" "transitBu11_inside" {
   name                 = "internal"
   virtual_network_name = module.network["transitBu11"].vnet_name
   resource_group_name  = azurerm_resource_group.rg["transitBu11"].name
+
+  depends_on = [module.network["transitBu11"].vnet_subnets]
 }
 
 data "azurerm_subnet" "transitBu12_outside" {
   name                 = "external"
   virtual_network_name = module.network["transitBu12"].vnet_name
   resource_group_name  = azurerm_resource_group.rg["transitBu12"].name
+
+  depends_on = [module.network["transitBu12"].vnet_subnets]
 }
 
 data "azurerm_subnet" "transitBu12_inside" {
   name                 = "internal"
   virtual_network_name = module.network["transitBu12"].vnet_name
   resource_group_name  = azurerm_resource_group.rg["transitBu12"].name
+
+  depends_on = [module.network["transitBu12"].vnet_subnets]
 }
 
 data "azurerm_subnet" "transitBu13_outside" {
   name                 = "external"
   virtual_network_name = module.network["transitBu13"].vnet_name
   resource_group_name  = azurerm_resource_group.rg["transitBu13"].name
+
+  depends_on = [module.network["transitBu13"].vnet_subnets]
 }
 
 data "azurerm_subnet" "transitBu13_inside" {
   name                 = "internal"
   virtual_network_name = module.network["transitBu13"].vnet_name
   resource_group_name  = azurerm_resource_group.rg["transitBu13"].name
+
+  depends_on = [module.network["transitBu13"].vnet_subnets]
 }
 
 
