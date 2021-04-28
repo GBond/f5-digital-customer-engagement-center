@@ -135,6 +135,8 @@ resource "volterra_tf_params_action" "applyBu11" {
   action           = "apply"
   wait_for_action  = true
   ignore_on_update = false
+
+  depends_on = [volterra_azure_vnet_site.bu11]
 }
 
 
@@ -221,6 +223,8 @@ resource "volterra_tf_params_action" "applyBu12" {
   action           = "apply"
   wait_for_action  = true
   ignore_on_update = false
+
+  depends_on = [volterra_azure_vnet_site.bu12]
 }
 
 ############################ Volterra Azure VNet Site - BU13 ############################
@@ -306,4 +310,6 @@ resource "volterra_tf_params_action" "applyBu13" {
   action           = "apply"
   wait_for_action  = true
   ignore_on_update = false
+
+  depends_on = [volterra_azure_vnet_site.bu13]
 }
