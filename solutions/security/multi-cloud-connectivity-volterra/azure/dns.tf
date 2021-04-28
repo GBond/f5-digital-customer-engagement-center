@@ -37,7 +37,7 @@ resource "azurerm_private_dns_a_record" "app" {
   for_each            = local.dnsRecords
   name                = each.value["name"]
   zone_name           = azurerm_private_dns_zone.sharedAcme.name
-  resource_group_name = azurerm_resource_group.rg[each.key].name
+  resource_group_name = azurerm_resource_group.rg["bu11"].name
   ttl                 = 300
   records             = each.value["records"]
 }
@@ -47,7 +47,7 @@ resource "azurerm_private_dns_a_record" "app" {
 resource "azurerm_private_dns_zone_virtual_network_link" "link" {
   for_each              = local.dnsRecords
   name                  = each.key
-  resource_group_name   = azurerm_resource_group.rg[each.key].name
+  resource_group_name   = azurerm_resource_group.rg["bu11"].name
   private_dns_zone_name = azurerm_private_dns_zone.sharedAcme.name
   virtual_network_id    = each.value["vnetId"]
 }
