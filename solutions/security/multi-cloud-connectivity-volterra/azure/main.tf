@@ -2,10 +2,16 @@ provider "azurerm" {
   features {}
 }
 
-############################ Locals for Business Units ############################
+############################ Locals for Vnets ############################
 
 locals {
-  businessUnits = {
+  vnets = {
+    transitHub = {
+      location       = var.azureLocation
+      addressSpace   = ["100.64.96.0/20"]
+      subnetPrefixes = ["100.64.96.0/24", "100.64.97.0/24"]
+      subnetNames    = ["external", "internal"]
+    }
     transitBu11 = {
       location       = var.azureLocation
       addressSpace   = ["100.64.48.0/20"]
@@ -47,8 +53,9 @@ locals {
 
 ############################ Resource Groups ############################
 
+# Create Resource Groups
 resource "azurerm_resource_group" "rg" {
-  for_each = local.businessUnits
+  for_each = local.vnets
   name     = format("%s-rg-%s-%s", var.projectPrefix, each.key, random_id.buildSuffix.hex)
   location = each.value["location"]
 
@@ -60,8 +67,9 @@ resource "azurerm_resource_group" "rg" {
 
 ############################ VNets ############################
 
+# Create VNets
 module "network" {
-  for_each            = local.businessUnits
+  for_each            = local.vnets
   source              = "Azure/vnet/azurerm"
   resource_group_name = azurerm_resource_group.rg[each.key].name
   vnet_name           = format("%s-vnet-%s-%s", var.projectPrefix, each.key, random_id.buildSuffix.hex)
@@ -85,112 +93,100 @@ module "network" {
   }
 }
 
-############################ VNet Peering - Transit Mesh ############################
+############################ Gateway for "Transit Mesh" ############################
 
-resource "azurerm_virtual_network_peering" "peer11to12" {
-  name                      = "peer11to12"
-  resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
-  virtual_network_name      = module.network["transitBu11"].vnet_name
-  remote_virtual_network_id = module.network["transitBu12"].vnet_id
-  allow_forwarded_traffic   = true
+
+############################ VNet Peering - "Transit Mesh" ############################
+
+# Create VNet peering "mesh" between all transit VNets
+# 
+# This will allow Volterra nodes to route within VNet peering
+# versus having to go egress/ingress to internet.
+# 
+# This hub/spoke method also avoids having to do a
+# complete mesh between all transit BU Vnets
+
+locals {
+  transitHubPeerings = {
+    transitBu11 = {
+    }
+    transitBu12 = {
+    }
+    transitBu13 = {
+    }
+  }
 }
 
-resource "azurerm_virtual_network_peering" "peer11to13" {
-  name                      = "peer11to13"
-  resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
-  virtual_network_name      = module.network["transitBu11"].vnet_name
-  remote_virtual_network_id = module.network["transitBu13"].vnet_id
+# Create transit hub to transit spoke peerings
+resource "azurerm_virtual_network_peering" "hubToSpoke" {
+  for_each                  = local.transitHubPeerings
+  name                      = format("hub-to-%s", each.key)
+  resource_group_name       = azurerm_resource_group.rg["transitHub"].name
+  virtual_network_name      = module.network["transitHub"].vnet_name
+  remote_virtual_network_id = module.network[each.key].vnet_id
   allow_forwarded_traffic   = true
+  allow_gateway_transit     = true
 }
 
-resource "azurerm_virtual_network_peering" "peer12to11" {
-  name                      = "peer12to11"
-  resource_group_name       = azurerm_resource_group.rg["transitBu12"].name
-  virtual_network_name      = module.network["transitBu12"].vnet_name
-  remote_virtual_network_id = module.network["transitBu11"].vnet_id
+# Create transit spoke to transit hub peerings
+resource "azurerm_virtual_network_peering" "spokeToHub" {
+  for_each                  = local.transitHubPeerings
+  name                      = format("%s-to-hub", each.key)
+  resource_group_name       = azurerm_resource_group.rg[each.key].name
+  virtual_network_name      = module.network[each.key].vnet_name
+  remote_virtual_network_id = module.network["transitHub"].vnet_id
   allow_forwarded_traffic   = true
-}
-
-resource "azurerm_virtual_network_peering" "peer12to13" {
-  name                      = "peer12to13"
-  resource_group_name       = azurerm_resource_group.rg["transitBu12"].name
-  virtual_network_name      = module.network["transitBu12"].vnet_name
-  remote_virtual_network_id = module.network["transitBu13"].vnet_id
-  allow_forwarded_traffic   = true
-}
-
-resource "azurerm_virtual_network_peering" "peer13to11" {
-  name                      = "peer13to11"
-  resource_group_name       = azurerm_resource_group.rg["transitBu13"].name
-  virtual_network_name      = module.network["transitBu13"].vnet_name
-  remote_virtual_network_id = module.network["transitBu11"].vnet_id
-  allow_forwarded_traffic   = true
-}
-
-resource "azurerm_virtual_network_peering" "peer13to12" {
-  name                      = "peer13to12"
-  resource_group_name       = azurerm_resource_group.rg["transitBu13"].name
-  virtual_network_name      = module.network["transitBu13"].vnet_name
-  remote_virtual_network_id = module.network["transitBu12"].vnet_id
-  allow_forwarded_traffic   = true
+  use_remote_gateways       = true
 }
 
 ############################ VNet Peering - BU to Transit ############################
 
-# BU to Transit BU11 Peering
-resource "azurerm_virtual_network_peering" "peer11_1" {
-  name                      = "peer11toTransit11"
-  resource_group_name       = azurerm_resource_group.rg["bu11"].name
-  virtual_network_name      = module.network["bu11"].vnet_name
-  remote_virtual_network_id = module.network["transitBu11"].vnet_id
-  allow_forwarded_traffic   = true
+# Create VNet peering between each BU and its transit services
+# 
+# This will allow clients in the BU VNets to access
+# shared services from other BUs via traversing the
+# transit peer and landing in the 100.64.x.x shared space.
+
+locals {
+  buTransitPeerings = {
+    bu11 = {
+      name         = "bu11-to-transitBu11"
+      remoteVnetId = module.network["transitBu11"].vnet_id
+    }
+    bu12 = {
+      name         = "bu12-to-transitBu12"
+      remoteVnetId = module.network["transitBu12"].vnet_id
+    }
+    bu13 = {
+      name         = "bu13-to-transitBu13"
+      remoteVnetId = module.network["transitBu13"].vnet_id
+    }
+    transitBu11 = {
+      name         = "transitBu11-to-bu11"
+      remoteVnetId = module.network["bu11"].vnet_id
+    }
+    transitBu12 = {
+      name         = "transitBu12-to-bu12"
+      remoteVnetId = module.network["bu12"].vnet_id
+    }
+    transitBu13 = {
+      name         = "transitBu13-to-bu13"
+      remoteVnetId = module.network["bu13"].vnet_id
+    }
+  }
 }
 
-resource "azurerm_virtual_network_peering" "peer11_2" {
-  name                      = "peerTransit11to11"
-  resource_group_name       = azurerm_resource_group.rg["transitBu11"].name
-  virtual_network_name      = module.network["transitBu11"].vnet_name
-  remote_virtual_network_id = module.network["bu11"].vnet_id
-  allow_forwarded_traffic   = true
-}
-
-# BU to Transit BU12 Peering
-resource "azurerm_virtual_network_peering" "peer12_1" {
-  name                      = "peer12toTransit12"
-  resource_group_name       = azurerm_resource_group.rg["bu12"].name
-  virtual_network_name      = module.network["bu12"].vnet_name
-  remote_virtual_network_id = module.network["transitBu12"].vnet_id
-  allow_forwarded_traffic   = true
-}
-
-resource "azurerm_virtual_network_peering" "peer12_2" {
-  name                      = "peerTransit12to12"
-  resource_group_name       = azurerm_resource_group.rg["transitBu12"].name
-  virtual_network_name      = module.network["transitBu12"].vnet_name
-  remote_virtual_network_id = module.network["bu12"].vnet_id
-  allow_forwarded_traffic   = true
-}
-
-# BU to Transit BU13 Peering
-resource "azurerm_virtual_network_peering" "peer13_1" {
-  name                      = "peer13toTransit13"
-  resource_group_name       = azurerm_resource_group.rg["bu13"].name
-  virtual_network_name      = module.network["bu13"].vnet_name
-  remote_virtual_network_id = module.network["transitBu13"].vnet_id
-  allow_forwarded_traffic   = true
-}
-
-resource "azurerm_virtual_network_peering" "peer13_2" {
-  name                      = "peerTransit13to13"
-  resource_group_name       = azurerm_resource_group.rg["transitBu13"].name
-  virtual_network_name      = module.network["transitBu13"].vnet_name
-  remote_virtual_network_id = module.network["bu13"].vnet_id
+resource "azurerm_virtual_network_peering" "buToTransit" {
+  for_each                  = local.buTransitPeerings
+  name                      = each.value["name"]
+  resource_group_name       = azurerm_resource_group.rg[each.key].name
+  virtual_network_name      = module.network[each.key].vnet_name
+  remote_virtual_network_id = each.value["remoteVnetId"]
   allow_forwarded_traffic   = true
 }
 
 ############################ Route Tables ############################
 
-# Set locals
 locals {
   routes = {
     bu11 = {
@@ -214,9 +210,9 @@ locals {
   }
 }
 
-# Create route tables
+# Create Route Tables
 resource "azurerm_route_table" "rt" {
-  for_each                      = local.businessUnits
+  for_each                      = local.vnets
   name                          = format("%s-rt-%s-%s", var.projectPrefix, each.key, random_id.buildSuffix.hex)
   location                      = azurerm_resource_group.rg[each.key].location
   resource_group_name           = azurerm_resource_group.rg[each.key].name
@@ -228,7 +224,7 @@ resource "azurerm_route_table" "rt" {
   }
 }
 
-# Collect Volterra node "inside" NIC data
+# Collect data for Volterra node "inside" NIC
 data "azurerm_network_interface" "sliBu11" {
   name                = "master-0-sli"
   resource_group_name = format("%s-bu11-volterra-%s", var.volterraUniquePrefix, random_id.buildSuffix.hex)
@@ -258,62 +254,13 @@ resource "azurerm_route" "rt" {
   next_hop_in_ip_address = each.value["nextHop"]
 }
 
-############################ Security Groups - Volterra CE Nodes ############################
-
-# Set locals
-locals {
-  nsgVolterra = {
-    bu11 = {
-      sourceAddress = local.businessUnits["transitBu11"].subnetPrefixes[1]
-    }
-    bu12 = {
-      sourceAddress = local.businessUnits["transitBu12"].subnetPrefixes[1]
-    }
-    bu13 = {
-      sourceAddress = local.businessUnits["transitBu13"].subnetPrefixes[1]
-    }
-    transitBu11 = {
-      sourceAddress = local.businessUnits["transitBu11"].subnetPrefixes[1]
-    }
-    transitBu12 = {
-      sourceAddress = local.businessUnits["transitBu12"].subnetPrefixes[1]
-    }
-    transitBu13 = {
-      sourceAddress = local.businessUnits["transitBu13"].subnetPrefixes[1]
-    }
-  }
-}
-
-# Allow Volterra CE nodes into network
-resource "azurerm_network_security_group" "allow_ce" {
-  for_each            = local.nsgVolterra
-  name                = format("%s-nsg-allow-ce-%s", var.projectPrefix, random_id.buildSuffix.hex)
-  location            = azurerm_resource_group.rg[each.key].location
-  resource_group_name = azurerm_resource_group.rg[each.key].name
-
-  security_rule {
-    name                       = "allow-ingress-ce"
-    priority                   = 200
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = each.value["sourceAddress"]
-    destination_address_prefix = "*"
-  }
-
-  tags = {
-    Name      = format("%s-nsg-allow-ce-%s", var.resourceOwner, random_id.buildSuffix.hex)
-    Terraform = "true"
-  }
-}
-
 ############################ Security Groups - Jumphost, Web Servers ############################
 
-# Set locals
 locals {
   jumphosts = {
+    transitHub = {
+      subnet = module.network["transitHub"].vnet_subnets[0]
+    }
     transitBu11 = {
       subnet = module.network["transitBu11"].vnet_subnets[0]
     }
@@ -413,6 +360,7 @@ resource "azurerm_network_security_group" "webserver" {
 
 ############################ Compute ############################
 
+# Create jumphost instances
 module "jumphost" {
   for_each           = local.jumphosts
   source             = "../../../../modules/azure/terraform/jumphost/"
@@ -426,6 +374,7 @@ module "jumphost" {
   securityGroup      = azurerm_network_security_group.jumphost[each.key].id
 }
 
+# Create webserver instances
 module "webserver" {
   for_each           = local.webservers
   source             = "../../../../modules/azure/terraform/webServer/"
